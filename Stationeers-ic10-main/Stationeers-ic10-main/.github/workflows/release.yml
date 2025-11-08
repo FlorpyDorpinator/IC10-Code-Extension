@@ -1,0 +1,133 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18.x
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+            toolchain: stable
+            override: true
+
+      - name: Build ic10lsp
+        working-directory: ./anex-ic10/ic10lsp
+        run: cargo build --release
+
+      - name: Prepare binaries for packaging (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p ./anex-ic10/anex-ic10-language-support/bin
+          cp ./anex-ic10/ic10lsp/target/release/ic10lsp ./anex-ic10/anex-ic10-language-support/bin/ic10lsp
+
+      - name: Prepare binaries for packaging (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p ./anex-ic10/anex-ic10-language-support/bin
+          cp ./anex-ic10/ic10lsp/target/release/ic10lsp.exe ./anex-ic10/anex-ic10-language-support/bin/ic10lsp.exe
+
+      - name: Install Dependencies
+        working-directory: ./anex-ic10/anex-ic10-language-support
+        run: npm ci
+
+      - name: Package VSCode extension
+        working-directory: ./anex-ic10/anex-ic10-language-support
+        run: npx vsce package -o ic10-language-support-${{ runner.os }}.vsix
+
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ runner.os }}
+          path: ./anex-ic10/anex-ic10-language-support/*.vsix
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all VSIX artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: vsix-artifacts
+
+      - name: Get version from package.json
+        id: package-version
+        run: |
+          # The package.json is not available here, so we extract from one of the artifacts
+          # Unzip one of the vsix files to get the package.json
+          unzip vsix-artifacts/vsix-Linux/*.vsix 'extension/package.json' -d temp-unzip
+          VERSION=$(jq -r .version temp-unzip/extension/package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Extract changelog for current version
+        id: changelog
+        run: |
+          # Extract content between the first version header and the next version header
+          # This gets the latest version's changelog content
+          CHANGELOG_PATH="anex-ic10/anex-ic10-language-support/CHANGELOG.md"
+          
+          # Get content between first ## [version] and next ## [version]
+          # Use awk to extract only the first version section
+          changelog_content=$(awk '/^## \[/{if(found) exit; found=1; next} found' "$CHANGELOG_PATH")
+          
+          # If the content is empty, fall back to commit message
+          if [ -z "$changelog_content" ]; then
+            changelog_content="Release v${{ steps.package-version.outputs.version }}"
+          fi
+          
+          # Save to output (handle multiline content properly)
+          echo "content<<EOF" >> $GITHUB_OUTPUT
+          echo "$changelog_content" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.package-version.outputs.version }}
+          name: IC10 Language Support v${{ steps.package-version.outputs.version }}
+          body: |
+            # 🔧 IC10 Language Support v${{ steps.package-version.outputs.version }}
+            
+            ${{ steps.changelog.outputs.content }}
+            
+            ## 📦 Installation
+            
+            The extension will auto-update through VS Code, or install manually:
+            1. Open Visual Studio Code.
+            2. Press Ctrl+P to open the Quick Open dialog.
+            3. Type ext install vsix
+            4. Select the latest version of the extension and press Enter.
+            5. Once the extension is installed, you can start using it by opening .ic10 files.
+            
+            ---
+            
+            **Full Changelog**: https://github.com/Anexgohan/Stationeers-ic10/compare/v${{ steps.package-version.outputs.previous-version }}...v${{ steps.package-version.outputs.version }}
+          files: |
+            vsix-artifacts/vsix-Linux/*.vsix
+            vsix-artifacts/vsix-Windows/*.vsix
+            vsix-artifacts/vsix-macOS/*.vsix
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

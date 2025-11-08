@@ -1,0 +1,40 @@
+{
+  "$schema": "vscode://schemas/color-theme",
+  "name": "IC10 In-Game Colors",
+  "type": "dark",
+  "colors": {},
+  "tokenColors": [
+    {
+      "scope": ["entity.name.function.ic10"],
+      "settings": { "foreground": "#FFFF00", "fontStyle": "" }
+    },
+    {
+      "scope": ["variable.parameter.register.ic10"],
+      "settings": { "foreground": "#0080FF" }
+    },
+    {
+      "scope": ["variable.language.device.ic10"],
+      "settings": { "foreground": "#00AA00" }
+    },
+    {
+      "scope": ["constant.numeric.ic10"],
+      "settings": { "foreground": "#20B2AA" }
+    },
+    {
+      "scope": ["support.type.logic.ic10"],
+      "settings": { "foreground": "#FFA500" }
+    },
+    {
+      "scope": ["comment.line.number-sign.ic10"],
+      "settings": { "foreground": "#808080", "fontStyle": "italic" }
+    },
+    {
+      "scope": ["entity.name.label.ic10"],
+      "settings": { "foreground": "#800080" }
+    },
+    {
+      "scope": ["variable.other.ic10"],
+      "settings": { "foreground": "#FFFFFF" }
+    }
+  ]
+}

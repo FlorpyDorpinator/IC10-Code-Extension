@@ -1,0 +1,29 @@
+# Local task files
+task_readme.md
+
+# claude files
+CLAUDE.md
+.claude/
+
+# Documentation directory (except specific files)
+# NOTE: Exceptions (!pattern) must come BEFORE the general ignore pattern
+# Git processes .gitignore rules top-to-bottom, so exceptions need to be defined first
+!documentation/hashes_ids.md
+!documentation/anex_stationeers_Instructions_Functions.md
+documentation/
+documentation/tasks/
+documentation/readme_publish-to-github.md
+
+# Development executables (platform-specific binaries)
+anex-ic10/dev/executables/
+
+# huge files
+anex-ic10/dev/dotNet/
+
+# git clone of other mods
+anex-ic10/dev/gamedata-mods/
+anex-ic10/dev/gamedata-mods/IC10-Extender
+anex-ic10/dev/gamedata-mods/xml-generator
+
+# Deprecated files
+anex-ic10/dev/extractor/StationeersDataExtractor-BepInEx

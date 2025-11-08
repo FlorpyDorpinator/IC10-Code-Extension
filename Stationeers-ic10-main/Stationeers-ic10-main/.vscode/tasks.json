@@ -1,0 +1,91 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Install IC10 Extension deps",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"& { if (Test-Path 'package-lock.json') { npm.cmd ci } else { npm.cmd install } }"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/FlorpyDorp IC10/FlorpyDorp Language Support"
+			}
+		},
+		{
+			"label": "Build IC10 Extension (JS)",
+			"type": "shell",
+			"command": "npm.cmd",
+			"args": [
+				"run",
+				"esbuild"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/FlorpyDorp IC10/FlorpyDorp Language Support"
+			}
+		},
+		{
+			"label": "Build IC10 LSP",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"build"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/FlorpyDorp IC10/ic10lsp"
+			}
+		},
+		{
+			"label": "Ensure IC10 bin dir",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"New-Item -ItemType Directory -Force -LiteralPath \"${workspaceFolder}/FlorpyDorp IC10/FlorpyDorp Language Support/bin\" | Out-Null"
+			]
+		},
+		{
+			"label": "Copy IC10 LSP",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-ExecutionPolicy",
+				"Bypass",
+				"-Command",
+				"Copy-Item -LiteralPath \"${workspaceFolder}/FlorpyDorp IC10/ic10lsp/target/debug/ic10lsp.exe\" -Destination \"${workspaceFolder}/FlorpyDorp IC10/FlorpyDorp Language Support/bin/ic10lsp.exe\" -Force"
+			]
+		},
+		{
+			"label": "Build IC10 Extension",
+			"dependsOrder": "sequence",
+			"dependsOn": [
+				"Install IC10 Extension deps",
+				"Build IC10 Extension (JS)",
+				"Build IC10 LSP",
+				"Ensure IC10 bin dir",
+				"Copy IC10 LSP"
+			],
+			"group": "build"
+		},
+		{
+			"label": "Build IC10 Extension",
+			"type": "shell",
+			"command": "echo This is a placeholder; the existing task will be run by VS Code.",
+			"group": "build"
+		},
+		{
+			"label": "Build IC10 Extension",
+			"type": "shell",
+			"command": "cd 'c:/Users/marka/Downloads/Stationeers-ic10-main/Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support'; npm run esbuild",
+			"group": "build"
+		}
+	]
+}

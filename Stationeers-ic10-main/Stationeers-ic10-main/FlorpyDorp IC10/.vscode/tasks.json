@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build IC10 Extension",
+			"type": "shell",
+			"command": "powershell",
+			"args": [
+				"-NoProfile",
+				"-Command",
+				"Set-Location -LiteralPath 'FlorpyDorp Language Support'; if (-not (Test-Path node_modules)) { npm install }; npm run esbuild; Set-Location -LiteralPath '..\\ic10lsp'; if (-not (Test-Path target\\debug\\ic10lsp.exe)) { cargo build }; Copy-Item '.\\target\\debug\\ic10lsp.exe' '..\\FlorpyDorp Language Support\\bin\\ic10lsp.exe' -Force"
+			],
+			"group": "build"
+		}
+	]
+}

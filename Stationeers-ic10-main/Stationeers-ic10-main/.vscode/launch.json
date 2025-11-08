@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run FlorpyDorp IC10 Extension (Workspace Root)",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/FlorpyDorp IC10/FlorpyDorp Language Support"],
+      "outFiles": ["${workspaceFolder}/FlorpyDorp IC10/FlorpyDorp Language Support/out/**/*.js"],
+      "preLaunchTask": "Build IC10 Extension"
+    },
+    {
+      "name": "Run IC10 Extension (no build)",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/FlorpyDorp IC10/FlorpyDorp Language Support"
+      ]
+    }
+  ]
+}

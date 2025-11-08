@@ -1,0 +1,5 @@
+# Verify ReferenceId with lb/lbn and aggregator tokens lint clean
+# Expect: no Unknown identifier for ReferenceId; no type mismatch for lb/lbn; aggregator Minimum accepted
+
+lbn r14 HASH("2037291645") HASH("TrinityAngleSolver") ReferenceId 1
+lb r10 HASH("StructureLargeSatelliteDish") ReferenceId Minimum

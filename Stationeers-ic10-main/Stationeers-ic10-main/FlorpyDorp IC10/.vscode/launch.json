@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run FlorpyDorp IC10 Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "runtimeExecutable": "${execPath}",
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/FlorpyDorp Language Support"],
+      "outFiles": ["${workspaceFolder}/FlorpyDorp Language Support/out/**/*.js"],
+      "preLaunchTask": "Build IC10 Extension"
+    }
+  ]
+}
