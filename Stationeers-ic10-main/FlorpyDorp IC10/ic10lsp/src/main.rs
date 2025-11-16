@@ -365,7 +365,10 @@ impl LanguageServer for Backend {
                     TextDocumentSyncKind::FULL,
                 )),
                 execute_command_provider: Some(ExecuteCommandOptions {
-                    commands: vec!["version".to_string(), "setDiagnostics".to_string()],
+                    commands: vec![
+                        "version".to_string(),
+                        "setDiagnostics".to_string(),
+                    ],
                     work_done_progress_options: WorkDoneProgressOptions {
                         work_done_progress: None,
                     },
@@ -443,6 +446,104 @@ impl LanguageServer for Backend {
                             self.client
                                 .publish_diagnostics(uri.clone(), vec![], None)
                                 .await;
+                        }
+                    }
+                }
+            }
+            "ic10.suppressAllRegisterDiagnostics" => {
+                // Get the document URI from the arguments
+                if let Some(uri_value) = params.arguments.get(0) {
+                    if let Some(uri_str) = uri_value.as_str() {
+                        if let Ok(uri) = Url::parse(uri_str) {
+                            let files = self.files.read().await;
+                            if let Some(file_data) = files.get(&uri) {
+                                let content = &file_data.document_data.content;
+                                
+                                // Re-run register analysis to get current diagnostics
+                                let mut register_analyzer = additional_features::RegisterAnalyzer::new();
+                                if let Some(ref tree) = file_data.document_data.tree {
+                                    register_analyzer.analyze_register_usage(
+                                        tree,
+                                        &content,
+                                        &file_data.type_data.aliases,
+                                    );
+                                    
+                                    // Collect all register diagnostic errors
+                                    let mut registers_with_errors = std::collections::HashSet::new();
+                                    let diagnostics = register_analyzer.generate_diagnostics();
+                                    
+                                    for diag in diagnostics {
+                                        if let Some(data) = &diag.data {
+                                            if let Some(register_name) = data.as_str() {
+                                                registers_with_errors.insert(register_name.to_string());
+                                            }
+                                        }
+                                    }
+                                    
+                                    if !registers_with_errors.is_empty() {
+                                        // Find existing @ignore directive or create new one
+                                        let mut ignore_line_index = None;
+                                        let mut existing_registers = Vec::new();
+
+                                        for (idx, line) in content.lines().enumerate() {
+                                            if line.contains("# ignore") {
+                                                ignore_line_index = Some(idx);
+                                                if let Some(ignore_start) = line.find("ignore") {
+                                                    let after_ignore = &line[ignore_start + 6..].trim();
+                                                    let registers_str = if after_ignore.starts_with(':') {
+                                                        &after_ignore[1..].trim()
+                                                    } else {
+                                                        after_ignore
+                                                    };
+                                                    for reg in registers_str.split(',') {
+                                                        let reg_name = reg.trim();
+                                                        if !reg_name.is_empty() {
+                                                            existing_registers.push(reg_name.to_string());
+                                                        }
+                                                    }
+                                                }
+                                                break;
+                                            }
+                                        }
+
+                                        // Merge with new registers
+                                        for reg in registers_with_errors {
+                                            if !existing_registers.contains(&reg) {
+                                                existing_registers.push(reg);
+                                            }
+                                        }
+                                        
+                                        existing_registers.sort();
+                                        let new_ignore_line = format!("# ignore {}", existing_registers.join(", "));
+
+                                        let edit = if let Some(line_idx) = ignore_line_index {
+                                            tower_lsp::lsp_types::TextEdit {
+                                                range: tower_lsp::lsp_types::Range::new(
+                                                    tower_lsp::lsp_types::Position::new(line_idx as u32, 0),
+                                                    tower_lsp::lsp_types::Position::new(line_idx as u32, content.lines().nth(line_idx).unwrap().len() as u32),
+                                                ),
+                                                new_text: new_ignore_line,
+                                            }
+                                        } else {
+                                            tower_lsp::lsp_types::TextEdit {
+                                                range: tower_lsp::lsp_types::Range::new(
+                                                    tower_lsp::lsp_types::Position::new(0, 0),
+                                                    tower_lsp::lsp_types::Position::new(0, 0),
+                                                ),
+                                                new_text: format!("{}\n", new_ignore_line),
+                                            }
+                                        };
+
+                                        // Apply the workspace edit
+                                        let workspace_edit = tower_lsp::lsp_types::WorkspaceEdit {
+                                            changes: Some(std::collections::HashMap::from([(uri.clone(), vec![edit])])),
+                                            ..Default::default()
+                                        };
+                                        
+                                        let _ = self.client.apply_edit(workspace_edit).await;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -587,6 +688,12 @@ impl LanguageServer for Backend {
             let call_text = call_node.utf8_text(document.content.as_bytes()).unwrap();
             if let Some(device_name) = crate::hash_utils::extract_hash_argument(call_text) {
                 if let Some(hash_val) = crate::hash_utils::get_device_hash(&device_name) {
+                    // Look up the display name for this hash
+                    let display_text = crate::device_hashes::HASH_TO_DISPLAY_NAME
+                        .get(&hash_val)
+                        .copied()
+                        .unwrap_or("Unknown Device");
+                    
                     let Some(line_node) = call_node.find_parent("line") else {
                         continue;
                     };
@@ -605,7 +712,7 @@ impl LanguageServer for Backend {
 
                     ret.push(InlayHint {
                         position: endpos.into(),
-                        label: InlayHintLabel::String(format!(" → {}", hash_val)),
+                        label: InlayHintLabel::String(format!(" → {}", display_text)),
                         kind: Some(InlayHintKind::TYPE),
                         text_edits: None,
                         tooltip: None,
@@ -1532,6 +1639,81 @@ impl LanguageServer for Backend {
                         }
 
                         break;
+                    }
+                }
+                "register_assigned_not_read" | "register_read_before_assign" => {
+                    // Extract register name from diagnostic data
+                    if let Some(data) = &diagnostic.data {
+                        if let Some(register_name) = data.as_str() {
+                            // Find existing @ignore directive or create a new one at the top
+                            let content = &document.content;
+                            let mut ignore_line_index = None;
+                            let mut existing_registers = Vec::new();
+
+                            // Look for existing ignore directive
+                            for (idx, line) in content.lines().enumerate() {
+                                if line.contains("# ignore") {
+                                    ignore_line_index = Some(idx);
+                                    // Parse existing registers
+                                    if let Some(ignore_start) = line.find("ignore") {
+                                        let after_ignore = &line[ignore_start + 6..].trim();
+                                        let registers_str = if after_ignore.starts_with(':') {
+                                            &after_ignore[1..].trim()
+                                        } else {
+                                            after_ignore
+                                        };
+                                        for reg in registers_str.split(',') {
+                                            let reg_name = reg.trim();
+                                            if !reg_name.is_empty() {
+                                                existing_registers.push(reg_name.to_string());
+                                            }
+                                        }
+                                    }
+                                    break;
+                                }
+                            }
+
+                            // Add register if not already present
+                            if !existing_registers.contains(&register_name.to_string()) {
+                                existing_registers.push(register_name.to_string());
+                            }
+
+                            let new_ignore_line = format!("# ignore {}", existing_registers.join(", "));
+
+                            let edit = if let Some(line_idx) = ignore_line_index {
+                                // Replace existing line
+                                let line_start = content.lines().take(line_idx).map(|l| l.len() + 1).sum::<usize>();
+                                let line_end = line_start + content.lines().nth(line_idx).unwrap().len();
+                                TextEdit::new(
+                                    tower_lsp::lsp_types::Range::new(
+                                        tower_lsp::lsp_types::Position::new(line_idx as u32, 0),
+                                        tower_lsp::lsp_types::Position::new(line_idx as u32, content.lines().nth(line_idx).unwrap().len() as u32),
+                                    ),
+                                    new_ignore_line,
+                                )
+                            } else {
+                                // Insert at top of file
+                                TextEdit::new(
+                                    tower_lsp::lsp_types::Range::new(
+                                        tower_lsp::lsp_types::Position::new(0, 0),
+                                        tower_lsp::lsp_types::Position::new(0, 0),
+                                    ),
+                                    format!("{}\n", new_ignore_line),
+                                )
+                            };
+
+                            ret.push(CodeActionOrCommand::CodeAction(CodeAction {
+                                title: format!("Ignore diagnostics for {}", register_name),
+                                kind: Some(CodeActionKind::QUICKFIX),
+                                diagnostics: Some(vec![diagnostic.clone()]),
+                                edit: Some(WorkspaceEdit::new(HashMap::from([(
+                                    uri.clone(),
+                                    vec![edit],
+                                )]))),
+                                is_preferred: Some(false),
+                                ..Default::default()
+                            }));
+                        }
                     }
                 }
                 _ => {}
@@ -2473,14 +2655,32 @@ impl Backend {
                             continue;
                         }
                     };
-                    // Special case: register (direct or via alias) holding ReferenceId can satisfy a Device parameter
+                    // Special case: register (direct or via alias) holding DeviceId or Unknown can satisfy a Device parameter
+                    // Special case: register holding LogicType or Unknown can satisfy a LogicType parameter
                     let mut effective_typ = typ;
                     if parameter.match_type(DataType::Device) {
                         if let Some(reg_name) = underlying_register.as_ref() {
-                            if register_analyzer.get_register_kind(reg_name)
-                                == additional_features::ValueKind::DeviceId
+                            let kind = register_analyzer.get_register_kind(reg_name);
+                            if kind == additional_features::ValueKind::DeviceId
+                                || kind == additional_features::ValueKind::Unknown
                             {
                                 effective_typ = instructions::Union(&[DataType::Device]);
+                            }
+                        }
+                    } else if parameter.match_type(DataType::LogicType) || parameter.match_type(DataType::SlotLogicType) {
+                        if let Some(reg_name) = underlying_register.as_ref() {
+                            let kind = register_analyzer.get_register_kind(reg_name);
+                            // LogicTypes are numeric constants, so Number/LogicType/Unknown can all satisfy LogicType parameters
+                            if kind == additional_features::ValueKind::LogicType
+                                || kind == additional_features::ValueKind::Number
+                                || kind == additional_features::ValueKind::Unknown
+                            {
+                                // Register holds a numeric/LogicType value, so it can be used where LogicType is expected
+                                if parameter.match_type(DataType::LogicType) {
+                                    effective_typ = instructions::Union(&[DataType::LogicType]);
+                                } else {
+                                    effective_typ = instructions::Union(&[DataType::SlotLogicType]);
+                                }
                             }
                         }
                     }

@@ -250,6 +250,10 @@ module.exports = grammar({
             'cos',
             'acos',
             'atan',
+            'get',
+            'getd',
+            'put',
+            'putd',
         ),
 
         logictype: $ => token(prec(5,choice(
@@ -340,6 +344,7 @@ module.exports = grammar({
             'ForceWrite',
             'SignalStrength',
             'SignalID',
+            'TargetSlotIndex',
             'TargetX',
             'TargetY',
             'TargetZ',

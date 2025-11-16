@@ -219,6 +219,8 @@ export function activate(context: vscode.ExtensionContext) {
             { scheme: 'file', language: 'ic10' },
             { scheme: 'untitled', language: 'ic10' }
         ],
+        // Use UTF-8 encoding for proper handling of special characters
+        outputChannelName: 'IC10 Language Server',
         middleware: {
             provideHover: async (document: vscode.TextDocument, position: vscode.Position, token: vscode.CancellationToken, next: any) => {
                 const useGameStyle = vscode.workspace.getConfiguration().get('ic10.hover.useGameStyle') as boolean;
@@ -850,6 +852,50 @@ export function activate(context: vscode.ExtensionContext) {
         }
         await restartClient();
         vscode.window.showInformationMessage(`IC10 diagnostics ${nextVal ? 'enabled' : 'disabled'} (client + server sync).`);
+    }));
+
+    // Suppress all register diagnostics by adding @ignore directive
+    context.subscriptions.push(vscode.commands.registerCommand('ic10.suppressAllRegisterDiagnostics', async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor || editor.document.languageId !== 'ic10') {
+            vscode.window.showInformationMessage('No active IC10 file');
+            return;
+        }
+
+        const uri = editor.document.uri.toString();
+        const options: ExecuteCommandParams = {
+            command: 'ic10.suppressAllRegisterDiagnostics',
+            arguments: [uri]
+        };
+
+        try {
+            await lc.sendRequest('workspace/executeCommand', options);
+            vscode.window.showInformationMessage('Added ignore directive for all register diagnostics');
+        } catch (err) {
+            vscode.window.showErrorMessage(`Failed to suppress register diagnostics: ${err instanceof Error ? err.message : String(err)}`);
+        }
+    }));
+
+    // Toggle between Stationeers theme and user's previous theme
+    context.subscriptions.push(vscode.commands.registerCommand('ic10.toggleStationeersTheme', async () => {
+        const config = vscode.workspace.getConfiguration();
+        const currentTheme = config.get<string>('workbench.colorTheme');
+        const stationeersTheme = 'Stationeers Dark';
+        
+        // Get or set the stored previous theme
+        const previousTheme = context.globalState.get<string>('ic10.previousTheme');
+        
+        if (currentTheme === stationeersTheme) {
+            // Switch back to previous theme (or default if none stored)
+            const targetTheme = previousTheme || 'Dark+ (default dark)';
+            await config.update('workbench.colorTheme', targetTheme, vscode.ConfigurationTarget.Global);
+            vscode.window.showInformationMessage(`Switched to ${targetTheme}`);
+        } else {
+            // Store current theme and switch to Stationeers
+            await context.globalState.update('ic10.previousTheme', currentTheme);
+            await config.update('workbench.colorTheme', stationeersTheme, vscode.ConfigurationTarget.Global);
+            vscode.window.showInformationMessage('Switched to Stationeers Dark theme');
+        }
     }));
 
 }

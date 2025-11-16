@@ -1,0 +1,65 @@
+
+move r15 0
+move r7 0
+move r12 0
+move r2 0
+move r1 0
+InitWaitLoop:
+    yield
+    get r12 db 12
+    beqz r12 InitWaitLoop
+Init:
+    yield
+    add r15 r3 r15
+    get r14 db r15
+    sub r15 r15 r3
+    move rr15 r14
+    add r15 1 r15
+    brlt r15 4 -5     #Place offset in db 3, 7, 11
+    OffsetLoad:
+        add r0 r0 r3 #0=Dish south, 90=Dish east, 180=Dish north, 270=Dish west.
+    OffsetMath:       
+        add r0 r0 360
+        brlt r0 360 2
+        sub r0 r0 360
+        brlt r0 360 2
+        sub r0 r0 360
+    move r14 0.017453292519943295
+    move r6 r2
+    mul r6 r6 r14
+    cos r6 r6
+    mul r8 r0 r14
+    mul r9 r1 r14
+    cos r4 r9
+    sin r5 r9
+    sin r2 r8
+    cos r3 r8
+    mul r0 r2 r5
+    move r1 r4
+    mul r2 r3 r5
+    lbn r10 HASH("StructureCircuitHousingCompact") HASH("TrinityTwo") ReferenceId 1
+    put r10 r7 r0
+    add r7 1 r7
+    put r10 r7 r1
+    add r7 1 r7
+    put r10 r7 r2
+    add r7 1 r7
+    put r10 r7 r6
+    add r7 1 r7
+    beq r7 12 ResetL
+    move r15 0
+    move r3 0
+    add r3 4 r3
+    mul r3 r13 r3
+    add r13 1 r13
+j Init
+
+ResetL:
+    put r10 12 1
+    put db 12 0
+    move r3 0
+    move r7 0
+    move r12 0
+    move r15 0
+    move r13 1
+j InitWaitLoop

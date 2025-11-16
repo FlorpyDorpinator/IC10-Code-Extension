@@ -485,6 +485,14 @@
     "named": false
   },
   {
+    "type": "get",
+    "named": false
+  },
+  {
+    "type": "getd",
+    "named": false
+  },
+  {
     "type": "hash_preproc",
     "named": true
   },
@@ -614,6 +622,14 @@
   },
   {
     "type": "push",
+    "named": false
+  },
+  {
+    "type": "put",
+    "named": false
+  },
+  {
+    "type": "putd",
     "named": false
   },
   {

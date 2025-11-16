@@ -1,5 +1,48 @@
 ### Changelog Beginning 11-01-2025
 
+## [1.2.5] - 2025-11-15
+
+### ✨ New Features
+- **Stationeers IC10 Editor Theme**: Added complete UI color theme matching in-game editor aesthetics
+  - Deep blue-teal editor background (#0a2838) matching game console
+  - Orange accents (#FFA500) for tabs, status bar, and highlights
+  - Dark blue sidebar (#062030) and activity bar (#041820)
+  - Orange window border when active
+  - Complete coverage: editor, tabs, sidebar, terminal, menus, notifications, and more
+- **Theme Toggle Command**: Press **Ctrl+Alt+T** to switch between Stationeers Dark and your previous theme
+  - Remembers your previous theme across sessions
+  - Works globally from any file type
+- **Register Diagnostic Suppression**: Added `# ignore` directive to suppress false-positive register warnings
+  - Manual: Add `# ignore r1, r2` anywhere in your code
+  - Code Action: Click lightbulb on register diagnostic → "Ignore diagnostics for rX"
+  - Hotkey: Press **Ctrl+Alt+I** to suppress all register diagnostics at once
+- **LogicType Value Tracking**: Extension now tracks when registers hold LogicType values
+  - `move LogicType.Power r0` marks r0 as holding a LogicType
+  - Registers with LogicType or Number values accepted where LogicType parameters expected
+  - Arithmetic operations on LogicType constants correctly produce Number values
+- **Complete Device Hash Database**: Updated to include all 1248 devices from Stationpedia
+  - HASH() inlay hints now show friendly device names instead of numeric hashes
+  - Added previously missing devices like StructureTankSmallInsulated
+- **Added LogicType**: `TargetSlotIndex` now recognized in grammar and LSP
+- Added support for `get`, `getd`, `put`, `putd` operations in tree-sitter grammar
+- Improved type system with Unknown value kind for runtime-determined values (get/pop/peek)
+- Register references (rr0-rr15) now treated as implicitly initialized like `sp`
+
+### 🐛 Bug Fixes
+- Fixed LogicType semantic highlighting to use orange color in both themes
+- Fixed "register read before assign" errors for rr0-rr15 indirect addressing registers
+- Fixed device parameter type checking to accept Unknown value kind from get operations
+- Fixed db:0-7 network channel type mismatches (channels can store any data type)
+- Fixed LogicType parameter validation to accept registers with numeric values
+- Fixed label colors to use darker purple (#800080) matching original theme
+
+### 🔧 Improvements
+- Optional colon in ignore directive (`# ignore` or `# ignore:` both work)
+- Code actions now properly identify register diagnostics for individual suppression
+- Better static analysis handling for complex control flow with jumps and loops
+- Keybinding changed from Ctrl+Alt+R to Ctrl+Alt+I to avoid conflicts
+- Enhanced semantic token colors for consistent LogicType display across themes
+
 ## [1.2.1] - 2025-11-15
 
 ### 🐛 Bug Fixes

@@ -1,19 +1,22 @@
-FlorpyDorp IC10 Language Support  
-================================  
-Advanced IC10 editing, documentation, device hashing, and completion tools for Stationeers.
+# FlorpyDorp IC10 Language Support  
+================================
 
-FlorpyDorp IC10 is a complete and actively maintained IC10 extension for VS Code. It provides deep IC10 language intelligence, rich hover documentation, expanded tokens, code diagnostics, device hashing tools, and quality-of-life enhancements built on years of community work.
+## Advanced IC10 editing, documentation, device hashing, and completion tools for Stationeers. Code in STYLE!
+
+ ### FlorpyDorp IC10 L.S. is a complete and actively maintained IC10 extension for VS Code. It provides deep IC10 language intelligence, rich hover documentation, expanded tokens, code diagnostics, device hashing tools, and quality-of-life enhancements built on years of community work.
 
 ---
 
 ## ✨ Highlights
 
 - Full IC10 syntax highlighting (`.ic10`)
+- **Two immersive color themes**: IC10 In-Game Colors (syntax) and Stationeers Dark (full UI) with a hotkey to swap
 - Intelligent autocompletion for all IC10 instructions
 - Operand suggestions for LogicType, SlotLogicType, BatchMode, DeviceIO, and more
 - Multi-example hover documentation for 80+ instructions
 - Expanded instruction descriptions and category grouping
 - Instant diagnostics toggle (Ctrl+Alt+D)
+- Theme toggle between Stationeers and your preferred theme (Ctrl+Alt+T)
 - Inline device names from both `HASH()` and numeric hash values
 - Inlay hints that avoid covering typed code
 - Hundreds of missing variables, enums, tokens, and structure hashes
@@ -48,17 +51,19 @@ define Sensor -1252983604                   ; → Gas Sensor
 
 Features:
 
-- 100+ devices mapped automatically  
+- 1200+ devices from complete Stationpedia database
 - Hover tooltips for device names  
 - Smart typo handling for common Stationeers prefab misspellings  
 - `HASH()` in defines behaves exactly like a numeric constant  
-- Inline hints appear wherever a hash is used  
+- Inline hints show friendly device names instead of numeric hashes  
+- A custom theme matching the colors of the game exactly!
 
 ---
 
 ## 🩺 Diagnostics & Code Tools
 
 - Syntax validation for instructions, parameters, and registers  
+- LogicType value tracking in registers for better type checking
 - Line, column, and byte-limit validation  
 - Unknown label/variable detection  
 - Case-insensitive token resolution  
@@ -67,6 +72,16 @@ Features:
 **Toggle diagnostics:**  
 Press **Ctrl+Alt+D** to instantly clear squiggles and pause the language server.  
 Press **Ctrl+Alt+D** again to restart it.
+
+**Suppress register diagnostics:**  
+When static analysis produces false positives for registers (common with complex jumps/loops):  
+- **Manual**: Add `# ignore r1, r2` anywhere in your code  
+- **Code Action**: Click the lightbulb on a register diagnostic → "Ignore diagnostics for rX"  
+- **Hotkey**: Press **Ctrl+Alt+I** to suppress all register diagnostics at once
+
+## 🎩 Code in STYLE!
+**Theme Toggle:**  
+Press **Ctrl+Alt+T** to switch between the immersive Stationeers Editor Theme and your previous theme.
 
 ---
 

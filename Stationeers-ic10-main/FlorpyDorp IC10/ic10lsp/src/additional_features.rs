@@ -26,6 +26,7 @@ pub enum ValueKind {
     Unknown,
     Number,
     DeviceId,
+    LogicType,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,6 +83,7 @@ impl RegisterUsage {
 pub struct RegisterAnalyzer {
     register_usage: HashMap<String, RegisterUsage>,
     alias_to_register: HashMap<String, String>, // alias -> register mapping for quick lookup
+    ignored_registers: std::collections::HashSet<String>, // registers to suppress diagnostics for
 }
 
 impl RegisterAnalyzer {
@@ -89,6 +91,7 @@ impl RegisterAnalyzer {
         Self {
             register_usage: HashMap::new(),
             alias_to_register: HashMap::new(),
+            ignored_registers: std::collections::HashSet::new(),
         }
     }
 
@@ -128,6 +131,35 @@ impl RegisterAnalyzer {
         }
     }
 
+    fn parse_ignore_directives(&mut self, content: &str) {
+        // Parse comments like: # ignore r2, r5, r10 (with or without colon)
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if let Some(comment_start) = trimmed.find('#') {
+                let comment = &trimmed[comment_start + 1..].trim();
+                
+                // Look for ignore or ignore: directive
+                if let Some(ignore_start) = comment.find("ignore") {
+                    let after_ignore = &comment[ignore_start + 6..].trim();
+                    // Skip optional colon
+                    let registers_str = if after_ignore.starts_with(':') {
+                        &after_ignore[1..].trim()
+                    } else {
+                        after_ignore
+                    };
+                    
+                    // Split by comma and extract register names
+                    for reg in registers_str.split(',') {
+                        let reg_name = reg.trim();
+                        if !reg_name.is_empty() {
+                            self.ignored_registers.insert(reg_name.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     pub fn analyze_register_usage(
         &mut self,
         tree: &Tree,
@@ -136,11 +168,17 @@ impl RegisterAnalyzer {
     ) {
         self.register_usage.clear();
         self.alias_to_register.clear();
+        self.ignored_registers.clear();
+        
+        // Parse ignore directives from comments
+        self.parse_ignore_directives(content);
 
         // Initialize all known registers
         for reg in [
             "r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12", "r13",
             "r14", "r15", "ra", "sp",
+            "rr0", "rr1", "rr2", "rr3", "rr4", "rr5", "rr6", "rr7", "rr8", "rr9", "rr10", "rr11", "rr12", "rr13",
+            "rr14", "rr15",
         ] {
             self.register_usage
                 .insert(reg.to_string(), RegisterUsage::new());
@@ -248,6 +286,11 @@ impl RegisterAnalyzer {
         for k in keys {
             if k.starts_with("rr") {
                 let usage = self.ensure_register_entry(&k);
+                // rr registers (register references) are implicitly initialized
+                // They always reference r0-r15 based on the rr number
+                if usage.assignments.is_empty() {
+                    usage.assignments.push(fabricated_range.clone());
+                }
                 if usage.reads.is_empty() {
                     usage.reads.push(fabricated_range.clone());
                 }
@@ -394,6 +437,11 @@ impl RegisterAnalyzer {
         let mut diagnostics = Vec::new();
 
         for (register_name, usage) in &self.register_usage {
+            // Skip registers that are in the ignore list
+            if self.ignored_registers.contains(register_name) {
+                continue;
+            }
+            
             match usage.get_state() {
                 RegisterState::Unused => {
                     // Only warn about unused aliases, not bare registers
@@ -418,20 +466,19 @@ impl RegisterAnalyzer {
                             .map(|alias| format!("'{}' ({})", alias, register_name))
                             .unwrap_or_else(|| register_name.clone());
 
-                        diagnostics.push(Diagnostic::new(
-                            assignment_range.clone().into(),
-                            Some(DiagnosticSeverity::WARNING),
-                            None,
-                            None,
-                            format!("Register {} is assigned but never read. Consider removing to optimize register usage.", register_display),
-                            None,
-                            None,
-                        ));
+                        diagnostics.push(Diagnostic {
+                            range: assignment_range.clone().into(),
+                            severity: Some(DiagnosticSeverity::WARNING),
+                            code: Some(tower_lsp::lsp_types::NumberOrString::String("register_assigned_not_read".to_string())),
+                            message: format!("Register {} is assigned but never read. Consider removing to optimize register usage.", register_display),
+                            data: Some(serde_json::json!(register_name)),
+                            ..Default::default()
+                        });
                     }
                 }
                 RegisterState::ReadBeforeAssign => {
-                    // Do not flag stack pointer as read-before-assign; it's implicitly initialized
-                    if register_name == "sp" {
+                    // Do not flag stack pointer or rr registers as read-before-assign; they're implicitly initialized
+                    if register_name == "sp" || register_name.starts_with("rr") {
                         continue;
                     }
                     for read_range in &usage.reads {
@@ -441,18 +488,17 @@ impl RegisterAnalyzer {
                             .map(|alias| format!("'{}' ({})", alias, register_name))
                             .unwrap_or_else(|| register_name.clone());
 
-                        diagnostics.push(Diagnostic::new(
-                            read_range.clone().into(),
-                            Some(DiagnosticSeverity::ERROR),
-                            None,
-                            None,
-                            format!(
+                        diagnostics.push(Diagnostic {
+                            range: read_range.clone().into(),
+                            severity: Some(DiagnosticSeverity::ERROR),
+                            code: Some(tower_lsp::lsp_types::NumberOrString::String("register_read_before_assign".to_string())),
+                            message: format!(
                                 "Register {} is read before being assigned a value.",
                                 register_display
                             ),
-                            None,
-                            None,
-                        ));
+                            data: Some(serde_json::json!(register_name)),
+                            ..Default::default()
+                        });
                     }
                 }
                 RegisterState::Used => {
@@ -617,10 +663,10 @@ impl RegisterAnalyzer {
                                 if let Some(kind) =
                                     self.register_usage.get(src_reg).map(|u| u.value_kind)
                                 {
-                                    if kind == ValueKind::DeviceId {
-                                        // preserve device id through pure unary ops
+                                    if kind == ValueKind::DeviceId || kind == ValueKind::LogicType {
+                                        // preserve device id and logictype through pure unary ops
                                         if !target_reg.is_empty() {
-                                            self.set_kind(&target_reg, ValueKind::DeviceId);
+                                            self.set_kind(&target_reg, kind);
                                         }
                                         continue;
                                     }
@@ -634,8 +680,15 @@ impl RegisterAnalyzer {
                 }
                 // Explicit numeric generating ops
                 // move already handled earlier; no case needed here to avoid unreachable pattern warning
-                // get/getd read device slots into registers as numbers
-                "get" | "getd" => {
+                // get/getd read from device slots or network channels and can return any type of data
+                // pop/peek read from the stack and can return any type of data
+                // We treat them as Unknown so they can be used as numbers, device IDs, or other values
+                "get" | "getd" | "pop" | "peek" => {
+                    // Leave as Unknown - don't set a specific kind
+                    // This allows the register to be used flexibly as the runtime value could be anything
+                }
+                "add" | "sub" | "mul" | "div" | "mod" | "max" | "min" | "and" | "or" | "xor" | "nor" => {
+                    // Arithmetic/logical operations: always produce Number even if inputs include LogicType constants
                     if !target_reg.is_empty() {
                         self.set_kind(&target_reg, ValueKind::Number);
                     }
@@ -680,35 +733,41 @@ impl RegisterAnalyzer {
                     if tokens.len() >= 3 {
                         let dst = tokens[1];
                         let src = tokens[2];
-                        let src_kind = self
-                            .register_usage
-                            .get(src)
-                            .map(|u| u.value_kind)
-                            .unwrap_or(ValueKind::Unknown);
-                        self.ensure_register_entry(dst).value_kind = src_kind;
-                        // If src is an alias name (non-register) try to resolve to underlying register for propagation
-                        if !src.starts_with('r') {
-                            if let Some(reg_name) = self.alias_to_register.get(src).cloned() {
-                                let alias_kind = self
-                                    .register_usage
-                                    .get(reg_name.as_str())
-                                    .map(|u| u.value_kind)
-                                    .unwrap_or(ValueKind::Unknown);
-                                self.ensure_register_entry(dst).value_kind = alias_kind;
-                                if alias_kind == ValueKind::Unknown {
-                                    // heuristic: prior ReferenceId load into reg_name
-                                    if content.lines().any(|l| {
-                                        l.contains(reg_name.as_str()) && l.contains("ReferenceId")
-                                    }) {
-                                        self.ensure_register_entry(dst).value_kind =
-                                            ValueKind::DeviceId;
+                        
+                        // Check if source is a LogicType or SlotLogicType identifier
+                        if src.contains("LogicType.") || src.contains("SlotLogicType.") {
+                            self.ensure_register_entry(dst).value_kind = ValueKind::LogicType;
+                        } else {
+                            let src_kind = self
+                                .register_usage
+                                .get(src)
+                                .map(|u| u.value_kind)
+                                .unwrap_or(ValueKind::Unknown);
+                            self.ensure_register_entry(dst).value_kind = src_kind;
+                            // If src is an alias name (non-register) try to resolve to underlying register for propagation
+                            if !src.starts_with('r') {
+                                if let Some(reg_name) = self.alias_to_register.get(src).cloned() {
+                                    let alias_kind = self
+                                        .register_usage
+                                        .get(reg_name.as_str())
+                                        .map(|u| u.value_kind)
+                                        .unwrap_or(ValueKind::Unknown);
+                                    self.ensure_register_entry(dst).value_kind = alias_kind;
+                                    if alias_kind == ValueKind::Unknown {
+                                        // heuristic: prior ReferenceId load into reg_name
+                                        if content.lines().any(|l| {
+                                            l.contains(reg_name.as_str()) && l.contains("ReferenceId")
+                                        }) {
+                                            self.ensure_register_entry(dst).value_kind =
+                                                ValueKind::DeviceId;
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-                "get" | "getd" => {
+                "get" | "getd" | "pop" | "peek" => {
                     if tokens.len() >= 2 {
                         let reg = tokens[1];
                         let ru = self.ensure_register_entry(reg);
@@ -720,9 +779,18 @@ impl RegisterAnalyzer {
                             );
                             ru.assignments.push(Range(fabricated));
                         }
-                        // Heuristic: get assigns a numeric value
-                        if matches!(ru.value_kind, ValueKind::Unknown) {
-                            ru.value_kind = ValueKind::Number;
+                        // Leave as Unknown - these operations can return any type of data
+                        // (device IDs, numbers, etc.) and we can't determine it statically
+                    }
+                }
+                "add" | "sub" | "mul" | "div" | "mod" | "max" | "min" => {
+                    // Arithmetic operations: check if any operand is a LogicType constant
+                    if tokens.len() >= 3 {
+                        let dst = tokens[1];
+                        // If source contains LogicType, the operation produces a Number
+                        let has_logictype = tokens[2..].iter().any(|t| t.contains("LogicType.") || t.contains("SlotLogicType."));
+                        if has_logictype {
+                            self.ensure_register_entry(dst).value_kind = ValueKind::Number;
                         }
                     }
                 }
@@ -1015,6 +1083,69 @@ mod tests {
         let mut ra = RegisterAnalyzer::new();
         ra.analyze_register_usage(&tree, src, &aliases);
         let info = ra.get_register_info("r12").unwrap();
+        
+        // Debug: verify assignments are being tracked
+        assert!(!info.assignments.is_empty(), "get should record an assignment to r12");
+        assert!(!info.reads.is_empty(), "beqz should record a read of r12");
+        assert!(!info.operation_history.is_empty(), "should have operation history");
+        
         assert_eq!(info.get_state(), RegisterState::Used);
+    }
+    
+    #[test]
+    fn get_db_with_label_assigns_before_branch_read() {
+        let aliases = HashMap::new();
+        let src = "InitWaitLoop:\n    yield\n    get r12 db 12\n    beqz r12 InitWaitLoop\n";
+        let mut parser = Parser::new();
+        parser.set_language(tree_sitter_ic10::language()).unwrap();
+        let tree = parser.parse(src, None).unwrap();
+        let mut ra = RegisterAnalyzer::new();
+        ra.analyze_register_usage(&tree, src, &aliases);
+        let info = ra.get_register_info("r12").unwrap();
+        
+        assert!(!info.assignments.is_empty(), "get should record an assignment to r12 even with label");
+        assert!(!info.reads.is_empty(), "beqz should record a read of r12");
+        assert_eq!(info.get_state(), RegisterState::Used);
+    }
+    
+    #[test]
+    fn debug_tree_sitter_parsing() {
+        use tree_sitter::{Query, QueryCursor};
+        
+        let test_get = "yield\nget r12 db 12\nbeqz r12 InitWaitLoop\n";
+        let trinity = "InitWaitLoop:\n    yield\n    get r12 db 12\n    beqz r12 InitWaitLoop\n";
+        
+        for (name, src) in [("test_get", test_get), ("trinity", trinity)] {
+            eprintln!("\n=== Parsing {} ===", name);
+            let mut parser = Parser::new();
+            parser.set_language(tree_sitter_ic10::language()).unwrap();
+            let tree = parser.parse(src, None).unwrap();
+            
+            eprintln!("S-expression:\n{}", tree.root_node().to_sexp());
+            
+            let instruction_query = Query::new(
+                tree_sitter_ic10::language(),
+                "(instruction (operation) @op) @instruction",
+            ).unwrap();
+            
+            let mut cursor = QueryCursor::new();
+            let op_idx = instruction_query.capture_index_for_name("op").unwrap();
+            let instruction_idx = instruction_query.capture_index_for_name("instruction").unwrap();
+            
+            eprintln!("Query captures:");
+            for (capture, _) in cursor.captures(&instruction_query, tree.root_node(), src.as_bytes()) {
+                for cap in capture.captures {
+                    if cap.index == op_idx {
+                        let line = cap.node.start_position().row + 1;
+                        let text = cap.node.utf8_text(src.as_bytes()).unwrap();
+                        eprintln!("  Line {}: Operation '{}'", line, text);
+                    } else if cap.index == instruction_idx {
+                        let line = cap.node.start_position().row + 1;
+                        let text = cap.node.utf8_text(src.as_bytes()).unwrap();
+                        eprintln!("  Line {}: Instruction '{}'", line, text);
+                    }
+                }
+            }
+        }
     }
 }

@@ -1,12 +1,13 @@
 {
   "$schema": "vscode://schemas/color-theme",
-  "name": "IC10 In-Game Colors",
+  "name": "IC10 Text Colors Only",
   "type": "dark",
   "semanticHighlighting": true,
   "colors": {},
   "semanticTokenColors": {
     "type": "#800080",
     "enum": "#20B2AA",
+    "string": "#FFA500",
     "number": "#20B2AA"
   },
   "tokenColors": [

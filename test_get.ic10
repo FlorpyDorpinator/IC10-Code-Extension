@@ -1,0 +1,3 @@
+yield
+get r12 db 12
+beqz r12 InitWaitLoop
