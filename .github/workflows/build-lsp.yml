@@ -13,6 +13,7 @@ jobs:
     name: Build LSP - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
@@ -37,19 +38,19 @@ jobs:
           targets: ${{ matrix.target }}
       
       - name: Cache cargo registry
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cargo/registry
           key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
           
       - name: Cache cargo index
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.cargo/git
           key: ${{ runner.os }}-cargo-git-${{ hashFiles('**/Cargo.lock') }}
           
       - name: Cache target directory
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: Stationeers-ic10-main/FlorpyDorp IC10/ic10lsp/target
           key: ${{ runner.os }}-${{ matrix.target }}-target-${{ hashFiles('**/Cargo.lock') }}
@@ -59,7 +60,7 @@ jobs:
         run: cargo build --release --target ${{ matrix.target }}
       
       - name: Upload Binary
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: ic10lsp-${{ matrix.target }}
           path: Stationeers-ic10-main/FlorpyDorp IC10/ic10lsp/target/${{ matrix.target }}/release/${{ matrix.binary }}
