@@ -138,8 +138,20 @@ export function activate(context: vscode.ExtensionContext) {
     // Activate Notification through VSCode Notifications
     vscode.window.showInformationMessage('IC10 Language Server is now active!');
 
-
-    const serverBinary = process.platform === "win32" ? "ic10lsp.exe" : "ic10lsp";
+    // Determine the correct binary name based on platform and architecture
+    let serverBinary: string;
+    if (process.platform === "win32") {
+        serverBinary = "ic10lsp-win32.exe";
+    } else if (process.platform === "linux") {
+        serverBinary = "ic10lsp-linux";
+    } else if (process.platform === "darwin") {
+        // macOS - check for Apple Silicon (ARM64) vs Intel (x64)
+        serverBinary = process.arch === "arm64" ? "ic10lsp-darwin-arm64" : "ic10lsp-darwin";
+    } else {
+        // Fallback for unknown platforms
+        vscode.window.showErrorMessage(`IC10 LSP: Unsupported platform ${process.platform}. Please compile ic10lsp manually and set ic10.lsp.serverPath in settings.`);
+        serverBinary = "ic10lsp";
+    }
     
     // Allow overriding the server path to avoid copy/lock issues during development
     const serverOverride = vscode.workspace.getConfiguration('ic10.lsp').get('serverPath') as string | undefined;

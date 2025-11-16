@@ -9,12 +9,19 @@
     "displayName": "FlorpyDorp IC10 Language Support",
     "description": "IC10 MIPS-like Language Support for Stationeers - Featuring completions, hover information, signature help, goto definition, diagnostics, and more.",
     "publisher": "FlorpyDorp",
-    "version": "1.2.5",
+    "version": "1.2.6",
     "engines": {
         "vscode": "^1.74.0"
     },
     "categories": [
         "Programming Languages"
+    ],
+    "keywords": [
+        "ic10",
+        "stationeers",
+        "mips",
+        "assembly",
+        "language server"
     ],
     "main": "./out/main.js",
     "contributes": {

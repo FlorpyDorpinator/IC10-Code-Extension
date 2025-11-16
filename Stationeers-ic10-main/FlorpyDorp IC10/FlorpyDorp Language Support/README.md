@@ -103,8 +103,14 @@ Press **Ctrl+Alt+T** to switch between the immersive Stationeers Editor Theme an
 2. Open or create a file ending in `.ic10`.  
 3. Start typing — language features load automatically.
 
+**Platform Support:**  
+- ✅ Windows (x64)
+- ✅ Linux (x64)
+- ✅ macOS Intel (x64)
+- ✅ macOS Apple Silicon (ARM64)
+
 **Restart the server:**  
-Ctrl+Shift+P → “IC10: Restart Server”
+Ctrl+Shift+P → "IC10: Restart Server"
 
 **Toggle diagnostics:**  
 Ctrl+Alt+D

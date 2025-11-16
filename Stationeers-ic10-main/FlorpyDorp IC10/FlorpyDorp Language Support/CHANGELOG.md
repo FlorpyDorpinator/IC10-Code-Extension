@@ -1,5 +1,17 @@
 ### Changelog Beginning 11-01-2025
 
+## [1.2.6] - 2025-11-15
+
+### 🌍 Multi-Platform Support
+- **Cross-Platform Binaries**: Extension now supports all major platforms
+  - ✅ Windows (x64)
+  - ✅ Linux (x64)
+  - ✅ macOS Intel (x64)
+  - ✅ macOS Apple Silicon (ARM64)
+- **Automatic Platform Detection**: Extension automatically selects correct LSP binary for your OS
+- **GitHub Actions Workflow**: Automated builds for all platforms on every push
+- Fixed "binary not found" error for Linux and macOS users
+
 ## [1.2.5] - 2025-11-15
 
 ### ✨ New Features
