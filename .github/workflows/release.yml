@@ -1,0 +1,146 @@
+name: Build and Release Extension
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.2.10)'
+        required: true
+
+jobs:
+  build-lsp-binaries:
+    name: Build LSP - ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            binary: ic10lsp.exe
+            output: ic10lsp-win32.exe
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            binary: ic10lsp
+            output: ic10lsp-linux
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            binary: ic10lsp
+            output: ic10lsp-darwin
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            binary: ic10lsp
+            output: ic10lsp-darwin-arm64
+            
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            Stationeers-ic10-main/FlorpyDorp IC10/ic10lsp/target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      
+      - name: Build LSP
+        working-directory: Stationeers-ic10-main/FlorpyDorp IC10/ic10lsp
+        run: cargo build --release --target ${{ matrix.target }}
+      
+      - name: Rename binary
+        shell: bash
+        run: |
+          mkdir -p binaries
+          cp "Stationeers-ic10-main/FlorpyDorp IC10/ic10lsp/target/${{ matrix.target }}/release/${{ matrix.binary }}" "binaries/${{ matrix.output }}"
+          chmod +x "binaries/${{ matrix.output }}" || true
+      
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lsp-${{ matrix.target }}
+          path: binaries/${{ matrix.output }}
+          if-no-files-found: error
+
+  package-extension:
+    name: Package Extension
+    needs: build-lsp-binaries
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Download all LSP binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: lsp-artifacts
+      
+      - name: Copy binaries to extension
+        run: |
+          mkdir -p "Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support/bin"
+          cp lsp-artifacts/lsp-x86_64-pc-windows-msvc/ic10lsp-win32.exe "Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support/bin/"
+          cp lsp-artifacts/lsp-x86_64-unknown-linux-gnu/ic10lsp-linux "Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support/bin/"
+          cp lsp-artifacts/lsp-x86_64-apple-darwin/ic10lsp-darwin "Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support/bin/"
+          cp lsp-artifacts/lsp-aarch64-apple-darwin/ic10lsp-darwin-arm64 "Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support/bin/"
+          chmod +x "Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support/bin/"ic10lsp-*
+      
+      - name: Install dependencies
+        working-directory: Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support
+        run: npm ci
+      
+      - name: Build extension
+        working-directory: Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support
+        run: npm run vscode:prepublish
+      
+      - name: Install vsce
+        run: npm install -g @vscode/vsce
+      
+      - name: Package extension
+        working-directory: Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support
+        run: vsce package --out ../../../
+      
+      - name: Get version from package.json
+        id: get_version
+        working-directory: Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "vsix_name=florpydorp-ic10-language-support-$VERSION.vsix" >> $GITHUB_OUTPUT
+      
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vsix-package
+          path: '*.vsix'
+          if-no-files-found: error
+      
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: '*.vsix'
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Publish to VS Code Marketplace
+        if: startsWith(github.ref, 'refs/tags/') && secrets.VSCE_PAT != ''
+        working-directory: Stationeers-ic10-main/FlorpyDorp IC10/FlorpyDorp Language Support
+        run: vsce publish -p ${{ secrets.VSCE_PAT }}
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
